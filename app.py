@@ -1,12 +1,6 @@
-"""12주차 직접 쓰기 앱: 배포할 수 있는 대시보드를 처음부터 씁니다.
 
-쓰는 법
-1. 칸마다 주석의 할 일을 읽고 '# 여기에 씁니다' 아래에 코드를 씁니다. 번호(# 1-3 등)는 강의 PDF 제목의 번호입니다.
-2. 내 컴퓨터에서 python -m streamlit run app.py 로 확인하고, 다 쓰면 python 배포_전_점검.py 로 [고침]이 0인지 봅니다.
-3. requirements.txt도 직접 채웁니다(1-4). 먼저 배포_예제/를 보지 않고 써 봅니다. 막히면 PDF의 같은 번호 쪽을 봅니다.
-4. 개인 프로젝트: sales.csv를 출처가 분명한 공개 데이터로 바꾸고 질문, 위젯, 차트를 내 데이터에 맞춰 고칩니다.
-   차트 3개 이상과 위젯에 따라 바뀌는 숫자·차트가 프로젝트 최소 요건입니다.
-"""
+"""12주차 직접 쓰기 앱: 배포할 수 있는 대시보드"""
+
 from pathlib import Path
 
 import pandas as pd
@@ -14,30 +8,193 @@ import plotly.express as px
 import streamlit as st
 
 COLORS = {"A": "#0072B2", "B": "#D55E00"}
+
 st.set_page_config(page_title="지점 실적 탐색", layout="wide")
 st.title("어느 지점의 실적이 더 좋은가")
-st.caption("출처: 수업용 가상 데이터(sales.csv) · 2026년 1~12월 지점별 월 실적 · 금액 단위: 백만원")
+st.caption(
+    "출처: 수업용 가상 데이터(sales.csv) · "
+    "2026년 1~12월 지점별 월 실적 · 금액 단위: 백만원"
+)
 
-# 1-3 데이터 경로: app.py가 있는 폴더(HERE)를 기준으로 sales.csv를 읽는 load_data를 만듭니다(@st.cache_data).
-#     C:\Users\... 같은 내 컴퓨터 경로는 서버에 없습니다. 파일이 없으면 st.error로 안내하고 st.stop()으로 멈춥니다.
-#     읽은 표는 data에 담습니다. 열은 month, branch, sales, profit입니다.
-# 여기에 씁니다
+# 1-3 데이터 경로
+HERE = Path(__file__).parent
 
-# 2-2 위젯 세 개(11주차): 사이드바에 지점(A, B 여러 개 고르기), 월 범위(1~12), 표시 지표(매출, 영업이익).
-#     고른 지표 이름을 열 이름(sales, profit)으로 바꿔 metric에 담습니다.
-# 여기에 씁니다
 
-# 빈 선택(11주차 2-3): 고른 지점과 월 범위의 행만 view에 담고, view가 비면 st.warning으로 안내한 뒤 st.stop()으로 멈춥니다.
-#     아래의 숫자, 차트, 표는 모두 view를 씁니다.
-# 여기에 씁니다
+@st.cache_data
+def load_data():
+    file_path = HERE / "sales.csv"
 
-# 3-1 지표 카드: 기간 합계와 표시 관측 수(행 수)를 카드 두 개로 보입니다.
-# 여기에 씁니다
+    if not file_path.exists():
+        st.error("sales.csv 파일이 없습니다.")
+        st.stop()
 
-# 2-9 한글 확인과 차트 세 개: 서버에는 한글 글꼴이 없을 수 있어 세 차트 모두 Plotly로 그립니다(브라우저가 글자를 그림).
-#     차트 1 월별 추이(선), 차트 2 지점별 기간 합계(막대), 차트 3 지점별 기간 영업이익률(막대, 이익 합계 ÷ 매출 합계 × 100).
-#     화면을 세 열로 나눠 차례로 넣습니다.
-# 여기에 씁니다
+    return pd.read_csv(file_path)
 
-# 4-1 표와 CSV 저장(11주차): view를 표로 보이고, 지금 고른 데이터를 CSV로 내려받는 단추를 둡니다.
-# 여기에 씁니다
+
+data = load_data()
+
+
+# 2-2 사이드바 위젯 세 개
+st.sidebar.header("조회 조건")
+
+branches = st.sidebar.multiselect(
+    "지점 선택",
+    options=["A", "B"],
+    default=["A", "B"]
+)
+
+month_range = st.sidebar.slider(
+    "월 범위",
+    min_value=1,
+    max_value=12,
+    value=(1, 12)
+)
+
+metric_name = st.sidebar.radio(
+    "표시 지표",
+    options=["매출", "영업이익"]
+)
+
+metric = {
+    "매출": "sales",
+    "영업이익": "profit"
+}[metric_name]
+
+
+# 빈 선택 처리
+view = data[
+    (data["branch"].isin(branches))
+    & (data["month"].between(
+        month_range[0], month_range[1]
+    ))
+].copy()
+
+if view.empty:
+    st.warning("선택한 조건에 해당하는 데이터가 없습니다.")
+    st.stop()
+
+
+# 3-1 지표 카드 두 개
+total = view[metric].sum()
+count = len(view)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric(
+        label=f"기간 {metric_name} 합계",
+        value=f"{total:,.1f} 백만원"
+    )
+
+with col2:
+    st.metric(
+        label="표시 관측 수",
+        value=f"{count}행"
+    )
+
+
+# 2-9 Plotly 차트 세 개
+st.subheader("지점별 실적 분석")
+
+chart1, chart2, chart3 = st.columns(3)
+
+# 차트 1: 월별 추이
+monthly = (
+    view.groupby(["month", "branch"], as_index=False)[metric]
+    .sum()
+)
+
+fig1 = px.line(
+    monthly,
+    x="month",
+    y=metric,
+    color="branch",
+    markers=True,
+    title=f"월별 {metric_name} 추이",
+    color_discrete_map=COLORS
+)
+
+fig1.update_layout(
+    xaxis_title="월",
+    yaxis_title=f"{metric_name} (백만원)"
+)
+
+with chart1:
+    st.plotly_chart(fig1, use_container_width=True)
+
+
+# 차트 2: 지점별 기간 합계
+branch_total = (
+    view.groupby("branch", as_index=False)[metric]
+    .sum()
+)
+
+fig2 = px.bar(
+    branch_total,
+    x="branch",
+    y=metric,
+    color="branch",
+    title=f"지점별 기간 {metric_name} 합계",
+    color_discrete_map=COLORS
+)
+
+fig2.update_layout(
+    xaxis_title="지점",
+    yaxis_title=f"{metric_name} (백만원)"
+)
+
+with chart2:
+    st.plotly_chart(fig2, use_container_width=True)
+
+
+# 차트 3: 지점별 영업이익률
+profit_rate = (
+    view.groupby("branch", as_index=False)[
+        ["sales", "profit"]
+    ]
+    .sum()
+)
+
+profit_rate["profit_rate"] = (
+    profit_rate["profit"]
+    / profit_rate["sales"].where(
+        profit_rate["sales"] != 0
+    )
+    * 100
+)
+
+fig3 = px.bar(
+    profit_rate,
+    x="branch",
+    y="profit_rate",
+    color="branch",
+    title="지점별 기간 영업이익률",
+    color_discrete_map=COLORS
+)
+
+fig3.update_layout(
+    xaxis_title="지점",
+    yaxis_title="영업이익률 (%)"
+)
+
+with chart3:
+    st.plotly_chart(fig3, use_container_width=True)
+
+
+# 4-1 표와 CSV 다운로드
+st.subheader("선택한 데이터")
+
+st.dataframe(
+    view,
+    use_container_width=True,
+    hide_index=True
+)
+
+csv = view.to_csv(index=False).encode("utf-8-sig")
+
+st.download_button(
+    label="선택 데이터 CSV 다운로드",
+    data=csv,
+    file_name="selected_sales.csv",
+    mime="text/csv"
+)
